@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 
 const completionSchema = new mongoose.Schema({
   date: { type: String, required: true }, // "YYYY-MM-DD"
-  completedAt: { type: Date, default: Date.now }
+  completedAt: { type: Date, default: Date.now },
+  note: { type: String, maxlength: 280, default: '' }
 });
 
 const habitSchema = new mongoose.Schema(

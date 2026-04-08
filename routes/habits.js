@@ -58,8 +58,9 @@ router.put('/:id/complete', async (req, res) => {
       // Un-complete today
       habit.completions.splice(completionIndex, 1);
     } else {
-      // Complete today
-      habit.completions.push({ date: today });
+      // Complete today — optionally attach a note
+      const { note } = req.body;
+      habit.completions.push({ date: today, note: note || '' });
     }
 
     await habit.save();
