@@ -36,11 +36,12 @@ router.post('/register', async (req, res) => {
     await OtpVerification.deleteMany({ email: email.toLowerCase() });
 
     // Generate OTP and hash it
+    // Using cost 8 (instead of 10) — OTPs are short-lived (10 min), no need for max bcrypt cost
     const otp = generateOtp();
-    const hashedOtp = await bcrypt.hash(otp, 10);
-
-    // Hash the password now so we can create the user instantly after verification
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const [hashedOtp, hashedPassword] = await Promise.all([
+      bcrypt.hash(otp, 8),
+      bcrypt.hash(password, 8),
+    ]);
 
     // Save pending verification
     await OtpVerification.create({
@@ -51,10 +52,13 @@ router.post('/register', async (req, res) => {
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     });
 
-    // Send OTP email
-    await sendOtpEmail(email, name, otp);
-
+    // Respond immediately — send email in background so the user isn't kept waiting
     res.status(200).json({ message: 'OTP sent to your email. Please verify to complete registration.' });
+
+    // Fire-and-forget: if this fails the user can click "Resend OTP"
+    sendOtpEmail(email, name, otp).catch((err) =>
+      console.error('Background OTP email failed for', email, ':', err.message)
+    );
   } catch (error) {
     console.error('Register error:', error);
     res.status(500).json({ message: 'Failed to send OTP. Please try again.', error: error.message });
@@ -125,15 +129,18 @@ router.post('/resend-otp', async (req, res) => {
       return res.status(400).json({ message: 'No pending registration found. Please sign up again.' });
 
     const otp = generateOtp();
-    const hashedOtp = await bcrypt.hash(otp, 10);
+    const hashedOtp = await bcrypt.hash(otp, 8);
 
     record.hashedOtp = hashedOtp;
     record.expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     await record.save();
 
-    await sendOtpEmail(email, record.name, otp);
-
+    // Respond immediately — send email in background
     res.json({ message: 'A new OTP has been sent to your email.' });
+
+    sendOtpEmail(email, record.name, otp).catch((err) =>
+      console.error('Background resend OTP email failed for', email, ':', err.message)
+    );
   } catch (error) {
     console.error('Resend OTP error:', error);
     res.status(500).json({ message: 'Failed to resend OTP.', error: error.message });
